@@ -326,10 +326,34 @@
     font-family:ui-monospace,SFMono-Regular,Menlo,monospace;resize:vertical;line-height:1.5;
   }
 
+  /* ── storage alarm ───────────────────────────────── */
+  .warn{
+    position:sticky;top:0;z-index:70;
+    background:var(--danger);color:#fff;
+    padding:11px 14px;font-size:13px;font-weight:600;line-height:1.4;
+    display:flex;align-items:center;gap:10px;text-align:left;width:100%;
+  }
+  .warn[hidden]{display:none}
+  .warn span{flex:1}
+  .warn b{text-decoration:underline}
+
+  .storage-state{
+    display:flex;align-items:center;gap:8px;
+    margin-top:16px;font-size:11.5px;color:var(--muted);
+  }
+  .storage-state .dot{width:7px;height:7px;border-radius:99px;background:var(--cash);flex:none}
+  .storage-state.bad{color:var(--danger)}
+  .storage-state.bad .dot{background:var(--danger)}
+
   @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style>
 </head>
 <body>
+<button class="warn" id="storageWarn" hidden>
+  <span id="storageWarnText"></span>
+  <b>Details</b>
+</button>
+
 <div class="bar">
   <div class="bar-in">
     <div class="mark">
@@ -419,6 +443,9 @@
       <button id="btnSave">Download file</button>
       <button class="full reset" id="btnReset">Delete all sales</button>
     </div>
+    <div class="storage-state" id="storageState">
+      <span class="dot"></span><span id="storageStateText">Saved on this phone</span>
+    </div>
   </section>
 </main>
 
@@ -506,11 +533,60 @@ let editing = false;
 let undoTimer = null;
 let lastOrder = null;             // the order the toast can undo
 
+let storageOK = true;
+
+/** Read, but never silently bin data we couldn't parse — stash it instead. */
 function load(key, fallback){
-  try { const v = JSON.parse(localStorage.getItem(key)); return Array.isArray(v) ? v : fallback; }
-  catch(e){ return fallback; }
+  let raw = null;
+  try { raw = localStorage.getItem(key); } catch(e){ return fallback; }
+  if (raw == null) return fallback;
+  try {
+    const v = JSON.parse(raw);
+    if (Array.isArray(v)) return v;
+    throw new Error("not an array");
+  } catch(e){
+    try { localStorage.setItem(key + "_damaged_" + Date.now(), raw); } catch(e2){}
+    return fallback;
+  }
 }
-function put(key, v){ try { localStorage.setItem(key, JSON.stringify(v)); } catch(e){} }
+
+/** Write, and prove it landed. A silent failure here would cost real money. */
+function put(key, v){
+  try {
+    const text = JSON.stringify(v);
+    localStorage.setItem(key, text);
+    if (localStorage.getItem(key) !== text) throw new Error("write not readable");
+    if (!storageOK){ storageOK = true; paintStorage(); }
+    return true;
+  } catch(e){
+    storageOK = false;
+    paintStorage();
+    return false;
+  }
+}
+
+function paintStorage(){
+  const warn = $("storageWarn");
+  const state = $("storageState");
+  if (!warn || !state) return;
+  warn.hidden = storageOK;
+  if (!storageOK) $("storageWarnText").textContent = "This phone is not saving sales. Write them down.";
+  state.classList.toggle("bad", !storageOK);
+  $("storageStateText").textContent = storageOK
+    ? "Saved on this phone — closing the app or losing signal won't lose anything"
+    : "NOT saving on this phone — every sale is at risk";
+}
+
+/** Can this browser actually store anything? Private mode often can't. */
+function storageWorks(){
+  try {
+    const probe = "__myth_probe__";
+    localStorage.setItem(probe, "1");
+    const ok = localStorage.getItem(probe) === "1";
+    localStorage.removeItem(probe);
+    return ok;
+  } catch(e){ return false; }
+}
 const saveSales = () => put(K_SALES, sales);
 const saveCart  = () => put(K_CART,  cart);
 const saveHide  = () => put(K_HIDE,  hidden);
@@ -1010,6 +1086,27 @@ document.addEventListener("keydown", e => {
   if (!$("copyScrim").hidden) $("copyScrim").hidden = true;
   else if (!$("cartScrim").hidden) closeCart();
 });
+
+$("storageWarn").addEventListener("click", () => {
+  alert(
+    "This phone isn't storing the sales.\n\n" +
+    "It's almost always one of these:\n\n" +
+    "• The page is open in Private / Incognito browsing — close it and open the normal window.\n" +
+    "• The phone's storage is full — free some space.\n\n" +
+    "Until the red bar disappears, write every sale down on paper. " +
+    "What's on screen right now is still correct, but it will be gone if the app closes."
+  );
+});
+
+/* Ask the phone not to evict our data when storage gets tight. */
+if (navigator.storage && navigator.storage.persist){
+  navigator.storage.persisted()
+    .then(p => p || navigator.storage.persist())
+    .catch(() => {});
+}
+
+storageOK = storageWorks();
+paintStorage();
 
 /* Offline support — only when served over http(s); a no-op inside the artifact. */
 if ("serviceWorker" in navigator && /^https?:$/.test(location.protocol)){
