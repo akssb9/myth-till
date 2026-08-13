@@ -1003,11 +1003,23 @@ function openCopy(){ $("copyText").value = plain(); $("copyScrim").hidden = fals
    Every push sends the whole list, so the sheet mirrors the phone exactly —
    undos and deletions included — and a missed push costs nothing but delay.
    ───────────────────────────────────────────────────── */
+/* Ahmed's sheet, wired in so nothing has to be pasted on the day.
+   Change this and rebuild if the deployment ever moves. */
+const DEFAULT_SYNC_URL = "https://script.google.com/macros/s/AKfycbzcRKxHZ9i_DceJeIku_F65D1T6RMpu8AiyaRLP1DXWhgQjS3IQSomi0Yrtvc8zP_gybg/exec";
+
 function str(key, fallback){
   try { return localStorage.getItem(key) || fallback; } catch(e){ return fallback; }
 }
 
-let syncUrl  = str(K_SYNC, "");
+/** Stored value wins — including a stored blank, which means "deliberately
+    disconnected". Only an untouched phone falls back to the built-in link. */
+function storedSyncUrl(){
+  let v = null;
+  try { v = localStorage.getItem(K_SYNC); } catch(e){}
+  return v === null ? DEFAULT_SYNC_URL : v;
+}
+
+let syncUrl  = storedSyncUrl();
 let seller   = str(K_SELLER, "");
 let deviceId = str(K_DEV, "");
 if (!deviceId){
@@ -1103,7 +1115,9 @@ async function connectSheet(){
 
   if (!clean){
     syncUrl = "";
-    try { localStorage.removeItem(K_SYNC); } catch(e){}
+    // Stored blank, not removed — otherwise it would silently reconnect to the
+    // built-in link on the next open.
+    try { localStorage.setItem(K_SYNC, ""); } catch(e){}
     paintLive();
     return;
   }
