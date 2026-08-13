@@ -1,0 +1,16 @@
+{
+  "name": "Myth Studios Till",
+  "short_name": "Myth Till",
+  "description": "Event till for Myth Studios — tap the figures, take cash or card.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#161314",
+  "theme_color": "#161314",
+  "icons": [
+    { "src": "./icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "./icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "./icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
