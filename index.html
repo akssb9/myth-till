@@ -345,6 +345,25 @@
   .storage-state.bad{color:var(--danger)}
   .storage-state.bad .dot{background:var(--danger)}
 
+  /* ── live sheet ──────────────────────────────────── */
+  .live{
+    display:flex;align-items:center;gap:10px;
+    margin-top:10px;padding:11px 13px;border-radius:12px;
+    background:var(--surface);border:1px solid var(--hairline);
+    font-size:12px;color:var(--muted);line-height:1.4;
+  }
+  .live .dot{width:7px;height:7px;border-radius:99px;flex:none;background:var(--muted)}
+  .live.on .dot{background:var(--cash)}
+  .live.queued .dot{background:var(--gold)}
+  .live.off .dot{background:var(--muted)}
+  .live .txt{flex:1;min-width:0}
+  .live .txt b{color:var(--ink);display:block;font-size:12.5px}
+  .live button{
+    padding:8px 12px;border-radius:9px;flex:none;white-space:nowrap;
+    background:var(--surface-2);border:1px solid var(--hairline);
+    font-size:12px;font-weight:600;color:var(--ink);
+  }
+
   @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style>
 </head>
@@ -446,6 +465,11 @@
     <div class="storage-state" id="storageState">
       <span class="dot"></span><span id="storageStateText">Saved on this phone</span>
     </div>
+    <div class="live off" id="live">
+      <span class="dot"></span>
+      <span class="txt"><b id="liveTitle">Live sheet not connected</b><span id="liveSub">Ahmed sees nothing until this is set up</span></span>
+      <button id="liveBtn">Connect</button>
+    </div>
   </section>
 </main>
 
@@ -525,6 +549,9 @@ function ph(c, t){
 const K_SALES = "myth_event_till_v1";
 const K_CART  = "myth_event_cart_v1";
 const K_HIDE  = "myth_event_hidden_v1";
+const K_SYNC  = "myth_event_sync_url_v1";
+const K_DEV   = "myth_event_device_v1";
+const K_SELLER = "myth_event_seller_v1";
 
 let sales  = load(K_SALES, []);   // one row per unit sold
 let cart   = load(K_CART,  []);   // [{id, qty, unit}] — unit = price per piece
@@ -776,6 +803,7 @@ function checkout(method){
   drawCartBar();
   render();
   toast(units, paid, method);
+  markDirty();
 }
 
 function toast(units, paid, method){
@@ -804,6 +832,7 @@ function undoOrder(){
   clearTimeout(undoTimer);
   drawCartBar();
   render();
+  markDirty();
 }
 
 /* ── summary ────────────────────────────────────────── */
@@ -968,7 +997,144 @@ async function download(){
 
 function openCopy(){ $("copyText").value = plain(); $("copyScrim").hidden = false; }
 
+/* ── live sheet ─────────────────────────────────────────
+   Local-first: a sale is recorded and shown instantly, then pushed in the
+   background. No network call ever sits between the seller and the sale.
+   Every push sends the whole list, so the sheet mirrors the phone exactly —
+   undos and deletions included — and a missed push costs nothing but delay.
+   ───────────────────────────────────────────────────── */
+function str(key, fallback){
+  try { return localStorage.getItem(key) || fallback; } catch(e){ return fallback; }
+}
+
+let syncUrl  = str(K_SYNC, "");
+let seller   = str(K_SELLER, "");
+let deviceId = str(K_DEV, "");
+if (!deviceId){
+  deviceId = "d" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  try { localStorage.setItem(K_DEV, deviceId); } catch(e){}
+}
+
+let syncDirty = false, syncBusy = false, syncLastOk = 0, syncLastErr = "";
+let syncTimer = null;
+
+function markDirty(){
+  syncDirty = true;
+  paintLive();
+  if (!syncUrl) return;
+  clearTimeout(syncTimer);
+  syncTimer = setTimeout(pushSales, 2500);   // let a burst of taps settle first
+}
+
+async function pushSales(quiet){
+  if (!syncUrl || syncBusy) return false;
+  syncBusy = true;
+  paintLive();
+  const payload = JSON.stringify({ device: deviceId, seller: seller, sales: sales, at: Date.now() });
+  // A hotel/venue captive portal can leave a request hanging forever. Without
+  // this the sync would wedge silently and never retry.
+  const abort = new AbortController();
+  const bail = setTimeout(() => abort.abort(), 15000);
+  try {
+    // text/plain keeps this a "simple" request — no CORS preflight to fail.
+    const res = await fetch(syncUrl, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: payload, redirect: "follow", signal: abort.signal });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    syncDirty = false; syncLastOk = Date.now(); syncLastErr = "";
+    return true;
+  } catch(err){
+    syncLastErr = String(err && err.message || err);
+    if (!quiet){
+      clearTimeout(syncTimer);
+      syncTimer = setTimeout(pushSales, 20000);   // keep trying, quietly
+    }
+    return false;
+  } finally {
+    clearTimeout(bail);
+    syncBusy = false;
+    paintLive();
+  }
+}
+
+function ago(ts){
+  const s = Math.round((Date.now() - ts) / 1000);
+  if (s < 60) return "just now";
+  if (s < 3600) return Math.round(s / 60) + " min ago";
+  return new Date(ts).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+}
+
+function paintLive(){
+  const box = $("live");
+  if (!box) return;
+  const unsent = syncDirty ? sales.length : 0;
+  box.classList.remove("on", "off", "queued");
+  if (!syncUrl){
+    box.classList.add("off");
+    $("liveTitle").textContent = "Live sheet not connected";
+    $("liveSub").textContent = "Ahmed sees nothing until this is set up";
+    $("liveBtn").textContent = "Connect";
+  } else if (syncBusy){
+    box.classList.add("queued");
+    $("liveTitle").textContent = "Sending to Ahmed…";
+    $("liveSub").textContent = sales.length + (sales.length === 1 ? " sale" : " sales");
+    $("liveBtn").textContent = "Send now";
+  } else if (syncDirty){
+    box.classList.add("queued");
+    $("liveTitle").textContent = "Waiting for signal";
+    $("liveSub").textContent = unsent + (unsent === 1 ? " sale" : " sales") + " not sent yet — nothing is lost, it'll go when there's data";
+    $("liveBtn").textContent = "Send now";
+  } else {
+    box.classList.add("on");
+    $("liveTitle").textContent = "Live to Ahmed's sheet";
+    $("liveSub").textContent = syncLastOk ? "Sent " + ago(syncLastOk) : "Connected";
+    $("liveBtn").textContent = "Send now";
+  }
+}
+
+async function connectSheet(){
+  const current = syncUrl || "";
+  const url = prompt(
+    "Paste the Google Sheet web app link.\n\n" +
+    "It looks like:\nhttps://script.google.com/macros/s/AKfy…/exec\n\n" +
+    "Leave it empty and press OK to disconnect.",
+    current
+  );
+  if (url === null) return;
+  const clean = url.trim();
+
+  if (!clean){
+    syncUrl = "";
+    try { localStorage.removeItem(K_SYNC); } catch(e){}
+    paintLive();
+    return;
+  }
+  if (!/^https:\/\/script\.google\.com\/macros\/s\/[^/]+\/exec/.test(clean)){
+    alert("That doesn't look like the right link.\n\nIt must start with https://script.google.com/macros/s/ and end with /exec — copy it from the Deploy screen in Apps Script.");
+    return;
+  }
+
+  syncUrl = clean;
+  try { localStorage.setItem(K_SYNC, clean); } catch(e){}
+
+  if (!seller){
+    const who = prompt("Whose phone is this? (shows up in the sheet)", "Seller");
+    if (who){ seller = who.trim(); try { localStorage.setItem(K_SELLER, seller); } catch(e){} }
+  }
+
+  syncDirty = true;
+  const ok = await pushSales(true);
+  alert(ok
+    ? "Connected. Ahmed can see the sales in his sheet now.\n\nIt keeps sending by itself after every sale."
+    : "Saved the link, but the test send didn't get through.\n\nCheck there's internet, and that the deployment is set to \"Anyone\" access. Sales are still being recorded safely on this phone either way."
+  );
+  paintLive();
+}
+
 /* ── wiring ─────────────────────────────────────────── */
+$("liveBtn").addEventListener("click", () => { syncUrl ? pushSales() : connectSheet(); });
+$("live").addEventListener("click", e => { if (!e.target.closest("button")) connectSheet(); });
+window.addEventListener("online", () => { if (syncDirty) pushSales(); });
+setInterval(() => { if (syncDirty && !syncBusy && navigator.onLine) pushSales(); }, 30000);
+
 $("grid").addEventListener("click", e => {
   const kill = e.target.closest("[data-kill]");
   if (kill){
@@ -1054,6 +1220,7 @@ $("orders").addEventListener("click", e => {
   saveSales();
   if (lastOrder === b.dataset.order){ lastOrder = null; $("toast").hidden = true; }
   render();
+  markDirty();
 });
 
 $("btnSave").addEventListener("click", download);
@@ -1069,6 +1236,7 @@ $("btnReset").addEventListener("click", () => {
   sales = []; lastOrder = null; saveSales();
   $("toast").hidden = true;
   render();
+  markDirty();
 });
 
 function selectTab(sell){
@@ -1107,6 +1275,8 @@ if (navigator.storage && navigator.storage.persist){
 
 storageOK = storageWorks();
 paintStorage();
+paintLive();
+if (syncUrl && sales.length) markDirty();   // catch up on anything the last session couldn't send
 
 /* Offline support — only when served over http(s); a no-op inside the artifact. */
 if ("serviceWorker" in navigator && /^https?:$/.test(location.protocol)){
