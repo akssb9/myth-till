@@ -162,6 +162,23 @@
   .meta .pr{font-size:15px;font-weight:700;color:var(--gold)}
   .meta .pr small{font-size:10px;color:var(--muted);font-weight:400;margin-right:3px;font-family:var(--sans)}
 
+  /* one-off sale, not a catalogue entry */
+  .fig.custom-fig{background:transparent;border:1px dashed var(--gold-dim)}
+  .fig.custom-fig .thumb{
+    background:rgba(201,162,75,.05);
+    display:flex;align-items:center;justify-content:center;
+  }
+  .fig.custom-fig .plus{
+    width:52px;height:52px;border-radius:99px;
+    border:1.5px dashed var(--gold);color:var(--gold);
+    font-size:27px;font-weight:300;line-height:1;
+    display:flex;align-items:center;justify-content:center;
+  }
+  .fig.custom-fig .nm{color:var(--gold)}
+  .fig.custom-fig .pr{font-size:11px;color:var(--muted);font-weight:400}
+
+  .chip.custom{background:rgba(201,162,75,.18);color:var(--gold)}
+
   .empty{padding:44px 20px;text-align:center;color:var(--muted);border:1px dashed var(--hairline);border-radius:var(--r)}
   .empty b{display:block;color:var(--ink);font-family:var(--serif);font-size:17px;margin-bottom:6px}
   .empty p{margin:0;font-size:13px;line-height:1.55}
@@ -505,6 +522,36 @@
   </div>
 </div>
 
+<div class="scrim" id="customScrim" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="customTitle">
+    <div class="handle"></div>
+    <h2 id="customTitle">Something not in the grid</h2>
+    <p style="margin:0 0 16px;color:var(--muted);font-size:13px;line-height:1.5">
+      Recorded as a one-off sale. It does not add a figure to the grid.
+    </p>
+    <div class="field">
+      <label for="customName">What is it?</label>
+      <div class="amt">
+        <input id="customName" type="text" autocomplete="off" placeholder="Unlisted item"
+               style="font-family:var(--sans);font-size:16px;font-weight:600">
+      </div>
+    </div>
+    <div class="field">
+      <label for="customPrice">Price</label>
+      <div class="amt">
+        <span class="cur">AED</span>
+        <input id="customPrice" type="text" inputmode="decimal" autocomplete="off" placeholder="0">
+      </div>
+    </div>
+    <div class="pay" style="grid-template-columns:1fr">
+      <button class="b-cash" id="customAdd" style="background:var(--gold);border-color:var(--gold);color:#211A0B">
+        Add to cart<small style="opacity:.6">Then take payment as normal</small>
+      </button>
+    </div>
+    <div class="sheet-foot"><button id="customCancel">Cancel</button></div>
+  </div>
+</div>
+
 <div class="scrim" id="copyScrim" hidden>
   <div class="sheet" role="dialog" aria-modal="true" aria-label="Copy summary">
     <div class="handle"></div>
@@ -634,7 +681,7 @@ const cartLine  = id => cart.find(l => l.id === id);
 const cartQty   = id => { const l = cartLine(id); return l ? l.qty : 0; };
 const cartUnits = () => cart.reduce((a, l) => a + l.qty, 0);
 const cartTotal = () => round2(cart.reduce((a, l) => a + l.unit * l.qty, 0));
-const listTotal = () => round2(cart.reduce((a, l) => { const it = byId(l.id); return a + (it ? it.price : l.unit) * l.qty; }, 0));
+const listTotal = () => round2(cart.reduce((a, l) => a + lineList(l) * l.qty, 0));
 
 function addToCart(id){
   const it = byId(id);
@@ -647,6 +694,22 @@ function addToCart(id){
   drawGrid();
   bump(id);
 }
+
+/** A one-off sale. Deliberately NOT added to CATALOG — the grid is unchanged,
+    this exists only as a cart line and then as a sale record. */
+function addCustom(name, price){
+  const clean = (name || "").trim() || "Unlisted item";
+  const key = "custom:" + clean.toLowerCase() + ":" + price;   // same thing at the same price stacks
+  const line = cartLine(key);
+  if (line) line.qty++;
+  else cart.push({ id: key, qty: 1, unit: price, name: clean, custom: true });
+  saveCart();
+  drawCartBar();
+  drawGrid();
+}
+
+const lineName = l => l.name || (byId(l.id) || {}).name || "Removed figure";
+const lineList = l => l.custom ? l.unit : ((byId(l.id) || {}).price != null ? byId(l.id).price : l.unit);
 
 function setQty(id, q){
   const line = cartLine(id);
@@ -684,7 +747,17 @@ function drawGrid(){
   const pool = visible();
   const hits = term ? pool.filter(i => i.name.toLowerCase().includes(term)) : pool;
 
-  $("grid").innerHTML = hits.map(i => {
+  const customQty = cart.filter(l => l.custom).reduce((a, l) => a + l.qty, 0);
+  const customTile =
+    '<button class="fig custom-fig" data-custom="1">' +
+      '<div class="thumb"><span class="plus">+</span>' +
+        (customQty ? '<span class="qty-badge">' + customQty + '</span>' : '') +
+      '</div>' +
+      '<div class="meta"><span class="nm">Something else</span>' +
+      '<span class="pr">Type a name and price</span></div>' +
+    '</button>';
+
+  $("grid").innerHTML = customTile + hits.map(i => {
     const q = cartQty(i.id), n = soldCount(i.id);
     return '<button class="fig' + (q ? " in-cart" : "") + '" data-id="' + esc(i.id) + '">' +
       (editing ? '<span class="kill" data-kill="' + esc(i.id) + '" role="img" aria-label="Remove figure">&times;</span>' : '') +
@@ -716,8 +789,8 @@ function renderCart(){
 
   $("cartLines").innerHTML = cart.map(l => {
     const it = byId(l.id);
-    const name = it ? it.name : "Removed figure";
-    const list = it ? it.price : l.unit;
+    const name = lineName(l);
+    const list = lineList(l);
     const changed = Math.abs(l.unit - list) > 0.001;
     return '<div class="line" data-id="' + esc(l.id) + '">' +
       (it ? '<img src="' + it.img + '" alt="">' : '') +
@@ -779,17 +852,20 @@ function checkout(method){
   let units = 0;
 
   cart.forEach(l => {
-    const it = byId(l.id);
+    // Customs tally by name so repeats group in the summary, but they never
+    // become catalogue ids — nothing is registered as a product.
+    const saleId = l.custom ? "custom:" + lineName(l).toLowerCase() : l.id;
     for (let k = 0; k < l.qty; k++){
       sales.push({
         sid: orderId + "-" + (++units),
         order: orderId,
-        id: l.id,
-        name: it ? it.name : "Removed figure",
-        list: it ? it.price : l.unit,
+        id: saleId,
+        name: lineName(l),
+        list: lineList(l),
         paid: l.unit,
         method: method,
-        t: t
+        t: t,
+        custom: !!l.custom || undefined
       });
     }
   });
@@ -908,7 +984,8 @@ function render(){
       return '<div class="order-l">' +
         (it ? '<img src="' + it.img + '" alt="">' : '') +
         '<span class="q">' + q + '&times;</span>' +
-        '<span class="n">' + esc(r.name) + '</span>' +
+        '<span class="n">' + esc(r.name) +
+          (r.custom ? ' <span class="chip custom">one-off</span>' : '') + '</span>' +
         '<span class="p">' + (cut ? '<s>' + fmt(r.list * q) + '</s>' : '') + fmt(r.paid * q) + '</span>' +
       '</div>';
     }).join("");
@@ -1162,8 +1239,29 @@ $("grid").addEventListener("click", e => {
   }
   if (editing) return;
   const fig = e.target.closest(".fig");
-  if (fig) addToCart(fig.dataset.id);
+  if (!fig) return;
+  if (fig.dataset.custom) openCustom();
+  else addToCart(fig.dataset.id);
 });
+
+function openCustom(){
+  $("customName").value = "";
+  $("customPrice").value = "";
+  $("customScrim").hidden = false;
+  setTimeout(() => $("customPrice").focus(), 60);
+}
+function closeCustom(){ $("customScrim").hidden = true; }
+
+$("customAdd").addEventListener("click", () => {
+  const price = num($("customPrice").value);
+  if (price <= 0){ $("customPrice").focus(); return; }
+  addCustom($("customName").value, price);
+  closeCustom();
+});
+$("customCancel").addEventListener("click", closeCustom);
+$("customScrim").addEventListener("click", e => { if (e.target === $("customScrim")) closeCustom(); });
+$("customPrice").addEventListener("keydown", e => { if (e.key === "Enter") $("customAdd").click(); });
+$("customName").addEventListener("keydown", e => { if (e.key === "Enter") $("customPrice").focus(); });
 
 $("editBtn").addEventListener("click", () => {
   editing = !editing;
@@ -1266,6 +1364,7 @@ $("tabSum").addEventListener("click", () => selectTab(false));
 document.addEventListener("keydown", e => {
   if (e.key !== "Escape") return;
   if (!$("copyScrim").hidden) $("copyScrim").hidden = true;
+  else if (!$("customScrim").hidden) closeCustom();
   else if (!$("cartScrim").hidden) closeCart();
 });
 
