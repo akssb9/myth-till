@@ -1,7 +1,7 @@
 /* Myth Studios till — offline shell.
    Cache-first: once the seller has opened it, the venue's wifi is irrelevant.
    VERSION is stamped by build.py, so a rebuilt catalog replaces the old cache. */
-const VERSION = "20260814-153527";
+const VERSION = "20260814-154218";
 const CACHE = "myth-till-" + VERSION;
 const ASSETS = ["./", "./index.html", "./manifest.webmanifest", "./icon-192.png", "./icon-512.png", "./apple-touch-icon.png"];
 
