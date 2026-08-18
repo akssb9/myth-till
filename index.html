@@ -658,10 +658,12 @@ const K_HIDE  = "myth_event_hidden_v1";
 const K_SYNC  = "myth_event_sync_url_v1";
 const K_DEV   = "myth_event_device_v1";
 const K_SELLER = "myth_event_seller_v1";
+const K_VOIDS  = "myth_event_voids_v1";
 
 let sales  = load(K_SALES, []);   // one row per unit sold
 let cart   = load(K_CART,  []);   // [{id, qty, unit}] — unit = price per piece
 let hidden = load(K_HIDE,  []);   // catalog ids taken off the grid
+let voids  = load(K_VOIDS, []);   // sale ids deliberately cancelled
 let editing = false;
 let undoTimer = null;
 let lastOrder = null;             // the order the toast can undo
@@ -723,6 +725,14 @@ function storageWorks(){
 const saveSales = () => put(K_SALES, sales);
 const saveCart  = () => put(K_CART,  cart);
 const saveHide  = () => put(K_HIDE,  hidden);
+const saveVoids = () => put(K_VOIDS, voids);
+
+/** Cancelling is explicit. The sheet only removes what is named here, so a
+    phone that loses its storage can never delete the day's takings. */
+function voidSales(rows){
+  rows.forEach(r => { if (r.sid && voids.indexOf(r.sid) === -1) voids.push(r.sid); });
+  saveVoids();
+}
 
 const $ = id => document.getElementById(id);
 const byId = id => CATALOG.find(i => i.id === id);
@@ -956,6 +966,7 @@ function toast(units, paid, method){
 function undoOrder(){
   if (!lastOrder) return;
   const rows = sales.filter(s => s.order === lastOrder);
+  voidSales(rows);
   sales = sales.filter(s => s.order !== lastOrder);
   saveSales();
   rows.forEach(r => {
@@ -1180,7 +1191,7 @@ async function pushSales(quiet){
   if (!syncUrl || syncBusy) return false;
   syncBusy = true;
   paintLive();
-  const payload = JSON.stringify({ device: deviceId, seller: seller, sales: sales, at: Date.now() });
+  const payload = JSON.stringify({ device: deviceId, seller: seller, sales: sales, voids: voids, at: Date.now() });
   // A hotel/venue captive portal can leave a request hanging forever. Without
   // this the sync would wedge silently and never retry.
   const abort = new AbortController();
@@ -1389,6 +1400,7 @@ $("orders").addEventListener("click", e => {
   const gt = rows.reduce((a, r) => a + r.paid, 0);
   if (!confirm("Delete this sale?\n\n" + rows.length + (rows.length === 1 ? " item" : " items") +
                " — AED " + fmt(gt) + " (" + rows[0].method + ")")) return;
+  voidSales(rows);
   sales = sales.filter(s => (s.order || s.sid) !== b.dataset.order);
   saveSales();
   if (lastOrder === b.dataset.order){ lastOrder = null; $("toast").hidden = true; }
@@ -1406,6 +1418,7 @@ $("btnReset").addEventListener("click", () => {
   const total = sales.reduce((a, s) => a + s.paid, 0);
   if (!confirm("Delete all " + sales.length + " sold figures (AED " + fmt(total) + ")?\n\nThis cannot be undone. Download the file first if you need the record.")) return;
   if (!confirm("Really wipe the summary back to zero?")) return;
+  voidSales(sales);
   sales = []; lastOrder = null; saveSales();
   $("toast").hidden = true;
   render();
