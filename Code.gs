@@ -1,7 +1,8 @@
 /**
  * Myth Studios event till — live sheet receiver.
  *
- * Paste this into Extensions → Apps Script on a fresh Google Sheet, then
+ * Create a standalone project at script.google.com, paste this in, set SHEET_ID
+ * to the spreadsheet you want it to write to, then
  * Deploy → New deployment → Web app, "Execute as: Me", "Who has access:
  * Anyone". Copy the /exec URL into the till (DEFAULT_SYNC_URL in index.html).
  *
@@ -12,6 +13,11 @@
  * Owner marks whose stock it was (Myth / Saeed) so the takings can be split.
  * Type marks whether it came off the grid or was typed in as a one-off.
  */
+
+// The spreadsheet this deployment writes to. Set it and the script can live
+// standalone — it does not need to be bound to the sheet. Leave it empty to
+// fall back to the container the script is attached to.
+var SHEET_ID = "1GBXTOUvLteXc8Rul2OsEqCfoIKkLj0TsIvRiTGTUpyw";   // Myth Studios — Jpex 20-23
 
 var ROWS = "Sales";
 var SUM = "Summary";
@@ -38,7 +44,7 @@ function doPost(e) {
     var body = JSON.parse(e.postData.contents);
     if (!body || !body.device) return json({ ok: false, error: "no device" });
 
-    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var ss = SHEET_ID ? SpreadsheetApp.openById(SHEET_ID) : SpreadsheetApp.getActiveSpreadsheet();
     var sheet = ss.getSheetByName(ROWS) || ss.insertSheet(ROWS);
 
     // Everything currently in the sheet, minus this device's rows —
