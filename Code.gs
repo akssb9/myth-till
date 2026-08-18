@@ -51,9 +51,8 @@ function doPost(e) {
     var ss = SHEET_ID ? SpreadsheetApp.openById(SHEET_ID) : SpreadsheetApp.getActiveSpreadsheet();
     var sheet = ss.getSheetByName(ROWS) || ss.insertSheet(ROWS);
 
-    // Everything currently in the sheet, minus this device's rows —
-    // this device is about to restate all of its own.
-    // Voided ids are the ONLY way a row leaves the sheet.
+    // Voided ids are the ONLY way a row leaves the sheet. Everything else in
+    // the sheet is kept, whatever the phone does or does not send.
     var voided = {};
     (body.voids || []).forEach(function (id) { voided[String(id)] = true; });
 
