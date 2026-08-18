@@ -6,9 +6,12 @@
  * Deploy → New deployment → Web app, "Execute as: Me", "Who has access:
  * Anyone". Copy the /exec URL into the till (DEFAULT_SYNC_URL in index.html).
  *
- * The phone sends its FULL list of sales every time, so the sheet always
- * matches the phone exactly — deletes and undos included. Rows are replaced
- * per device, so two phones never overwrite each other.
+ * The sheet is the permanent record, not the phone. Incoming sales are ADDED
+ * and de-duplicated by Sale ID; rows are never removed just because a phone
+ * stopped mentioning them. So a lost, broken, reset or storage-wiped phone
+ * cannot delete the day's takings.
+ *
+ * Removing a sale is therefore explicit: the phone sends its id in "voids".
  *
  * Owner marks whose stock it was (Myth / Saeed) so the takings can be split.
  * Type marks whether it came off the grid or was typed in as a one-off.
@@ -31,6 +34,7 @@ var COL_DEVICE = 10;
 var COL_OWNER = 3;
 var COL_ITEM = 2;
 var COL_CUSTOMER = 1;
+var COL_SALEID = 11;
 
 function doPost(e) {
   var lock = LockService.getScriptLock();
@@ -49,15 +53,27 @@ function doPost(e) {
 
     // Everything currently in the sheet, minus this device's rows —
     // this device is about to restate all of its own.
-    var kept = [];
+    // Voided ids are the ONLY way a row leaves the sheet.
+    var voided = {};
+    (body.voids || []).forEach(function (id) { voided[String(id)] = true; });
+
+    var kept = [], seen = {};
     if (sheet.getLastRow() > 1) {
       var old = sheet.getRange(2, 1, sheet.getLastRow() - 1, HEADERS.length).getValues();
       for (var i = 0; i < old.length; i++) {
-        if (String(old[i][COL_DEVICE]) !== String(body.device)) kept.push(old[i]);
+        var sid = String(old[i][COL_SALEID]);
+        if (voided[sid]) continue;          // explicitly cancelled
+        seen[sid] = true;
+        kept.push(old[i]);
       }
     }
 
-    var incoming = (body.sales || []).map(function (s) {
+    // Only sales the sheet has never seen. Re-sending the same list is harmless.
+    var fresh = (body.sales || []).filter(function (s) {
+      return s.sid && !seen[String(s.sid)] && !voided[String(s.sid)];
+    });
+
+    var incoming = fresh.map(function (s) {
       var list = Number(s.list) || 0;
       var paid = Number(s.paid) || 0;
       return [
@@ -93,7 +109,12 @@ function doPost(e) {
     sheet.autoResizeColumns(1, HEADERS.length);
 
     writeSummary(ss, all);
-    return json({ ok: true, stored: incoming.length, total: all.length });
+    return json({
+      ok: true,
+      added: incoming.length,
+      voided: (body.voids || []).length,
+      total: all.length
+    });
   } catch (err) {
     return json({ ok: false, error: String(err) });
   } finally {
