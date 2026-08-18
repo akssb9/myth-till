@@ -3,19 +3,28 @@
  *
  * Paste this into Extensions → Apps Script on a fresh Google Sheet, then
  * Deploy → New deployment → Web app, "Execute as: Me", "Who has access:
- * Anyone". Copy the /exec URL into the till (Summary → Connect live sheet).
+ * Anyone". Copy the /exec URL into the till (DEFAULT_SYNC_URL in index.html).
  *
  * The phone sends its FULL list of sales every time, so the sheet always
  * matches the phone exactly — deletes and undos included. Rows are replaced
  * per device, so two phones never overwrite each other.
+ *
+ * Owner marks whose stock it was (Myth / Saeed) so the takings can be split.
+ * Type marks whether it came off the grid or was typed in as a one-off.
  */
 
 var ROWS = "Sales";
 var SUM = "Summary";
 var HEADERS = [
-  "Time", "Customer", "Item", "List AED", "Paid AED",
+  "Time", "Customer", "Item", "Owner", "Type", "List AED", "Paid AED",
   "Discount AED", "Payment", "Seller", "Device", "Sale ID"
 ];
+var COL_PAID = 6;      // zero-based indexes into a row
+var COL_PAYMENT = 8;
+var COL_DEVICE = 10;
+var COL_OWNER = 3;
+var COL_ITEM = 2;
+var COL_CUSTOMER = 1;
 
 function doPost(e) {
   var lock = LockService.getScriptLock();
@@ -38,18 +47,22 @@ function doPost(e) {
     if (sheet.getLastRow() > 1) {
       var old = sheet.getRange(2, 1, sheet.getLastRow() - 1, HEADERS.length).getValues();
       for (var i = 0; i < old.length; i++) {
-        if (String(old[i][8]) !== String(body.device)) kept.push(old[i]);
+        if (String(old[i][COL_DEVICE]) !== String(body.device)) kept.push(old[i]);
       }
     }
 
     var incoming = (body.sales || []).map(function (s) {
+      var list = Number(s.list) || 0;
+      var paid = Number(s.paid) || 0;
       return [
         new Date(s.t),
         s.order || "",
         s.name || "",
-        Number(s.list) || 0,
-        Number(s.paid) || 0,
-        Math.round(((Number(s.list) || 0) - (Number(s.paid) || 0)) * 100) / 100,
+        s.owner || "Myth",
+        s.custom ? "One-off" : "Catalogue",
+        list,
+        paid,
+        Math.round((list - paid) * 100) / 100,
         s.method || "",
         body.seller || "",
         body.device,
@@ -68,7 +81,8 @@ function doPost(e) {
     if (all.length) {
       sheet.getRange(2, 1, all.length, HEADERS.length).setValues(all);
       sheet.getRange(2, 1, all.length, 1).setNumberFormat("dd/MM HH:mm");
-      sheet.getRange(2, 4, all.length, 3).setNumberFormat("#,##0.00");
+      // List / Paid / Discount are columns 6-8, 1-based (not COL_PAID, which indexes the array)
+      sheet.getRange(2, 6, all.length, 3).setNumberFormat("#,##0.00");
     }
     sheet.autoResizeColumns(1, HEADERS.length);
 
@@ -85,14 +99,21 @@ function doPost(e) {
 function writeSummary(ss, all) {
   var sheet = ss.getSheetByName(SUM) || ss.insertSheet(SUM, 0);
   var total = 0, cash = 0, card = 0;
+  var owners = {};
   var orders = {}, items = {};
 
   for (var i = 0; i < all.length; i++) {
-    var paid = Number(all[i][4]) || 0;
+    var paid = Number(all[i][COL_PAID]) || 0;
     total += paid;
-    if (String(all[i][6]).toLowerCase() === "cash") cash += paid; else card += paid;
-    orders[all[i][1]] = true;
-    var name = all[i][2];
+    if (String(all[i][COL_PAYMENT]).toLowerCase() === "cash") cash += paid; else card += paid;
+
+    var who = all[i][COL_OWNER] || "Myth";
+    if (!owners[who]) owners[who] = { total: 0, qty: 0 };
+    owners[who].total += paid;
+    owners[who].qty++;
+
+    orders[all[i][COL_CUSTOMER]] = true;
+    var name = all[i][COL_ITEM];
     if (!items[name]) items[name] = { q: 0, t: 0 };
     items[name].q++;
     items[name].t += paid;
@@ -113,7 +134,7 @@ function writeSummary(ss, all) {
     ["Figures sold", all.length],
     ["Customers", Object.keys(orders).length],
     ["", ""],
-    ["BEST SELLERS", ""]
+    ["WHOSE STOCK", ""]
   ];
   sheet.getRange(1, 1, block.length, 2).setValues(block);
   sheet.getRange(1, 1, 1, 2).setFontWeight("bold").setFontSize(14)
@@ -123,10 +144,25 @@ function writeSummary(ss, all) {
   sheet.getRange(4, 1, 1, 2).setFontWeight("bold").setFontSize(13);
   sheet.getRange(10, 1, 1, 2).setFontWeight("bold");
 
+  // Split by owner, so Saeed's share is a number you can read straight off.
+  var names = Object.keys(owners).sort();
+  var row = 11;
+  if (names.length) {
+    var split = names.map(function (n) {
+      return [n, owners[n].total, owners[n].qty + " sold"];
+    });
+    sheet.getRange(row, 1, split.length, 3).setValues(split);
+    sheet.getRange(row, 2, split.length, 1).setNumberFormat("#,##0.00");
+    sheet.getRange(row, 1, split.length, 1).setFontWeight("bold");
+    row += split.length;
+  }
+
+  row += 1;
+  sheet.getRange(row, 1).setValue("BEST SELLERS").setFontWeight("bold");
   if (best.length) {
-    sheet.getRange(11, 1, best.length, 3)
+    sheet.getRange(row + 1, 1, best.length, 3)
       .setValues(best.map(function (b) { return [b[0], b[1] + "x", b[2]]; }));
-    sheet.getRange(11, 3, best.length, 1).setNumberFormat("#,##0.00");
+    sheet.getRange(row + 1, 3, best.length, 1).setNumberFormat("#,##0.00");
   }
   sheet.autoResizeColumns(1, 3);
 }
