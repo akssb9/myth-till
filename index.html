@@ -477,8 +477,7 @@
     <div class="acts">
       <button id="btnCopy">Copy for WhatsApp</button>
       <button id="btnSave">Download file</button>
-      <!-- "Delete all sales" removed: a seller wiped a day's takings with it.
-           Clearing between events is done by Ahmed in the Google Sheet. -->
+      <button class="full" id="btnNewDay">Start a new day</button>
     </div>
     <div class="storage-state" id="storageState">
       <span class="dot"></span><span id="storageStateText">Saved on this phone</span>
@@ -1420,6 +1419,37 @@ $("btnCopy").addEventListener("click", openCopy);
 $("copyClose").addEventListener("click", () => { $("copyScrim").hidden = true; });
 $("copyText").addEventListener("click", e => e.target.select());
 
+
+/** Resets the seller's own running total for a fresh day. Deliberately does NOT
+    void anything: the sheet is the record and keeps every sale. Refuses while
+    sales are still queued, or they would be lost before ever reaching the sheet. */
+$("btnNewDay").addEventListener("click", () => {
+  if (!sales.length){ alert("Already starting from zero."); return; }
+
+  if (syncUrl && syncDirty){
+    alert(
+      sales.length + (sales.length === 1 ? " sale has" : " sales have") +
+      " not reached Ahmed's sheet yet.\n\n" +
+      "Wait until this screen says “Live to Ahmed’s sheet”, then start the new day. " +
+      "Clearing now would lose them."
+    );
+    return;
+  }
+
+  const total = sales.reduce((a, s) => a + s.paid, 0);
+  if (!confirm(
+    "Start a new day?\n\n" +
+    "This clears the total on THIS PHONE only — AED " + fmt(total) + " from " +
+    sales.length + (sales.length === 1 ? " sale" : " sales") + ".\n\n" +
+    "Ahmed's sheet keeps every sale. Nothing is deleted from the records."
+  )) return;
+
+  sales = []; lastOrder = null; saveSales();
+  voids = []; saveVoids();
+  $("toast").hidden = true;
+  render();
+  paintLive();
+});
 
 function selectTab(sell){
   $("tabSell").setAttribute("aria-selected", sell);
