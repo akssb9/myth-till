@@ -11,7 +11,12 @@
  * stopped mentioning them. So a lost, broken, reset or storage-wiped phone
  * cannot delete the day's takings.
  *
- * Removing a sale is therefore explicit: the phone sends its id in "voids".
+ * Removing a sale is deliberately hard. A "void" from the phone is honoured only
+ * within VOID_WINDOW_MS of the sheet RECEIVING that row — enough for Undo and an
+ * immediate mis-ring, far too short to erase a day. Anything older can only be
+ * removed by an owner request carrying ADMIN_KEY, which the phone never sends.
+ *
+ * That means a seller cannot wipe the takings, deliberately or by accident.
  *
  * Owner marks whose stock it was (Myth / Saeed) so the takings can be split.
  * Type marks whether it came off the grid or was typed in as a one-off.
@@ -26,7 +31,7 @@ var ROWS = "Sales";
 var SUM = "Summary";
 var HEADERS = [
   "Time", "Customer", "Item", "Owner", "Type", "List AED", "Paid AED",
-  "Discount AED", "Payment", "Seller", "Device", "Sale ID"
+  "Discount AED", "Payment", "Seller", "Device", "Sale ID", "Received"
 ];
 var COL_PAID = 6;      // zero-based indexes into a row
 var COL_PAYMENT = 8;
@@ -35,6 +40,14 @@ var COL_OWNER = 3;
 var COL_ITEM = 2;
 var COL_CUSTOMER = 1;
 var COL_SALEID = 11;
+var COL_RECEIVED = 12;          // server time the row landed — never the phone's clock
+
+// A phone may cancel a sale only this soon after the sheet received it.
+var VOID_WINDOW_MS = 5 * 60 * 1000;
+
+// Owner-only override. Not in the app, not in the public page — see
+// event-app/LIVE-SHEET-URLS.local.md. Lets Ahmed remove a row the app cannot.
+var ADMIN_KEY = "SET-THIS-IN-THE-DEPLOYED-SCRIPT-ONLY";
 
 function doPost(e) {
   var lock = LockService.getScriptLock();
@@ -51,28 +64,36 @@ function doPost(e) {
     var ss = SHEET_ID ? SpreadsheetApp.openById(SHEET_ID) : SpreadsheetApp.getActiveSpreadsheet();
     var sheet = ss.getSheetByName(ROWS) || ss.insertSheet(ROWS);
 
-    // Voided ids are the ONLY way a row leaves the sheet. Everything else in
-    // the sheet is kept, whatever the phone does or does not send.
-    var voided = {};
-    (body.voids || []).forEach(function (id) { voided[String(id)] = true; });
+    // A void is a request, not a command. It is obeyed only for a row the sheet
+    // received moments ago, or when the caller proves it is the owner.
+    var isOwner = body.adminKey && body.adminKey === ADMIN_KEY;
+    var now = Date.now();
+    var asked = {};
+    (body.voids || []).forEach(function (id) { asked[String(id)] = true; });
+    var refused = 0;
 
     var kept = [], seen = {};
     if (sheet.getLastRow() > 1) {
       var old = sheet.getRange(2, 1, sheet.getLastRow() - 1, HEADERS.length).getValues();
       for (var i = 0; i < old.length; i++) {
         var sid = String(old[i][COL_SALEID]);
-        if (voided[sid]) continue;          // explicitly cancelled
+        if (asked[sid]) {
+          var recv = old[i][COL_RECEIVED] ? new Date(old[i][COL_RECEIVED]).getTime() : 0;
+          var fresh = recv && (now - recv) < VOID_WINDOW_MS;
+          if (isOwner || fresh) continue;   // allowed to go
+          refused++;                        // too old, and not the owner — it stays
+        }
         seen[sid] = true;
         kept.push(old[i]);
       }
     }
 
     // Only sales the sheet has never seen. Re-sending the same list is harmless.
-    var fresh = (body.sales || []).filter(function (s) {
-      return s.sid && !seen[String(s.sid)] && !voided[String(s.sid)];
+    var incomingNew = (body.sales || []).filter(function (s) {
+      return s.sid && !seen[String(s.sid)];
     });
 
-    var incoming = fresh.map(function (s) {
+    var incoming = incomingNew.map(function (s) {
       var list = Number(s.list) || 0;
       var paid = Number(s.paid) || 0;
       return [
@@ -87,7 +108,8 @@ function doPost(e) {
         s.method || "",
         body.seller || "",
         body.device,
-        s.sid || ""
+        s.sid || "",
+        new Date()
       ];
     });
 
@@ -111,7 +133,8 @@ function doPost(e) {
     return json({
       ok: true,
       added: incoming.length,
-      voided: (body.voids || []).length,
+      removed: (body.voids || []).length - refused,
+      refusedTooOld: refused,
       total: all.length
     });
   } catch (err) {
