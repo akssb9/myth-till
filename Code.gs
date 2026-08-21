@@ -13,10 +13,10 @@
  *
  * Removing a sale is deliberately hard. A "void" from the phone is honoured only
  * within VOID_WINDOW_MS of the sheet RECEIVING that row — enough for Undo and an
- * immediate mis-ring, far too short to erase a day. Anything older can only be
- * removed by an owner request carrying ADMIN_KEY, which the phone never sends.
+ * immediate mis-ring, far too short to erase a day.
  *
- * That means a seller cannot wipe the takings, deliberately or by accident.
+ * Nothing else can remove a row. A seller cannot wipe the takings, deliberately or
+ * by accident. The owner edits the sheet directly if a row must go.
  *
  * Owner marks whose stock it was (Myth / Saeed) so the takings can be split.
  * Type marks whether it came off the grid or was typed in as a one-off.
@@ -45,9 +45,6 @@ var COL_RECEIVED = 12;          // server time the row landed — never the phon
 // A phone may cancel a sale only this soon after the sheet received it.
 var VOID_WINDOW_MS = 5 * 60 * 1000;
 
-// Owner-only override. Not in the app, not in the public page — see
-// event-app/LIVE-SHEET-URLS.local.md. Lets Ahmed remove a row the app cannot.
-var ADMIN_KEY = "SET-THIS-IN-THE-DEPLOYED-SCRIPT-ONLY";
 
 function doPost(e) {
   var lock = LockService.getScriptLock();
@@ -64,9 +61,8 @@ function doPost(e) {
     var ss = SHEET_ID ? SpreadsheetApp.openById(SHEET_ID) : SpreadsheetApp.getActiveSpreadsheet();
     var sheet = ss.getSheetByName(ROWS) || ss.insertSheet(ROWS);
 
-    // A void is a request, not a command. It is obeyed only for a row the sheet
-    // received moments ago, or when the caller proves it is the owner.
-    var isOwner = body.adminKey && body.adminKey === ADMIN_KEY;
+    // A void is a request, not a command: obeyed only for a row the sheet
+    // received moments ago.
     var now = Date.now();
     var asked = {};
     (body.voids || []).forEach(function (id) { asked[String(id)] = true; });
@@ -80,8 +76,8 @@ function doPost(e) {
         if (asked[sid]) {
           var recv = old[i][COL_RECEIVED] ? new Date(old[i][COL_RECEIVED]).getTime() : 0;
           var fresh = recv && (now - recv) < VOID_WINDOW_MS;
-          if (isOwner || fresh) continue;   // allowed to go
-          refused++;                        // too old, and not the owner — it stays
+          if (fresh) continue;               // cancelled in time, let it go
+          refused++;                         // too old to cancel — it stays
         }
         seen[sid] = true;
         kept.push(old[i]);
