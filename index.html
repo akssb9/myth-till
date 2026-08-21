@@ -477,7 +477,8 @@
     <div class="acts">
       <button id="btnCopy">Copy for WhatsApp</button>
       <button id="btnSave">Download file</button>
-      <button class="full reset" id="btnReset">Delete all sales</button>
+      <!-- "Delete all sales" removed: a seller wiped a day's takings with it.
+           Clearing between events is done by Ahmed in the Google Sheet. -->
     </div>
     <div class="storage-state" id="storageState">
       <span class="dot"></span><span id="storageStateText">Saved on this phone</span>
@@ -1419,17 +1420,6 @@ $("btnCopy").addEventListener("click", openCopy);
 $("copyClose").addEventListener("click", () => { $("copyScrim").hidden = true; });
 $("copyText").addEventListener("click", e => e.target.select());
 
-$("btnReset").addEventListener("click", () => {
-  if (!sales.length) return;
-  const total = sales.reduce((a, s) => a + s.paid, 0);
-  if (!confirm("Delete all " + sales.length + " sold figures (AED " + fmt(total) + ")?\n\nThis cannot be undone. Download the file first if you need the record.")) return;
-  if (!confirm("Really wipe the summary back to zero?")) return;
-  voidSales(sales);
-  sales = []; lastOrder = null; saveSales();
-  $("toast").hidden = true;
-  render();
-  markDirty();
-});
 
 function selectTab(sell){
   $("tabSell").setAttribute("aria-selected", sell);
