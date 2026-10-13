@@ -104,8 +104,16 @@ needs a restyle while credits are under 2, say so — that's the day posting wil
 On any failure: `python3 social/rotate.py fail <id> "<what failed>"`, commit, push, and report
 what failed and what's needed. Never post a substitute.
 
+## Schedule
+
+Routine `trig_01Bwh7ZRgWuTNMgns6x6ciTW`, 09:05 Asia/Dubai daily, fires into Claude Code session
+`session_01Vz2Udhh1btnkRbdce35ZJS` (where the daily reports appear).
+
 ## Open items for Ahmed
 
+- **Turn off the PC tasks** `myth-studios-daily-post` and `myth-studios-reels` in the Claude
+  desktop app. They keep their own rotation and would post a second, possibly duplicate,
+  product if the PC comes back on.
 - **Higgsfield credits:** the subscription was cancelled 2026-09-09 and the balance is 0. Four
   products are ready to post without it; the 21 after them each need a 2-credit restyle.
 - **Parked, no price:** Deadpool Mask, Dirham Tray, Sovereign Medallion. They join the rotation
