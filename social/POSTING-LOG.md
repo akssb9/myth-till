@@ -2,7 +2,7 @@
 
 Written by `social/rotate.py`; do not edit by hand.
 
-## Posts (cycle 1, 20/45 posted)
+## Posts (cycle 1, 21/45 posted)
 
 | Date | Item | AED | Post ID |
 |------|------|-----|---------|
@@ -26,3 +26,4 @@ Written by `social/rotate.py`; do not edit by hand.
 | 2026-09-01 | Hylian Shield | 50 | 18089729543162529 |
 | 2026-10-13 | GTA VI Logo | 30 | 18028399802860242 |
 | 2026-10-14 | Banana Guy Mask | 250 | 17892206112448014 |
+| 2026-10-15 | Captain America Helmet | 250 | 18192773869396788 |
