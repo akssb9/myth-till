@@ -207,9 +207,16 @@
     "2026-10-13": "i026",
     "2026-10-14": "i003",
     "2026-10-15": "i009",
-    "2026-10-16": "i028"
+    "2026-10-16": "i028",
+    "2026-10-17": "i011"
   },
-  "failures": [],
+  "failures": [
+    {
+      "date": "2026-10-17",
+      "id": "i011",
+      "reason": "needs a studio restyle (2 Higgsfield credits); balance is 0, so nothing was posted"
+    }
+  ],
   "parked": [
     {
       "name": "Deadpool Mask",

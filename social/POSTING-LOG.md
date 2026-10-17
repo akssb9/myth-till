@@ -2,6 +2,10 @@
 
 Written by `social/rotate.py`; do not edit by hand.
 
+## Last failure
+
+2026-10-17 — Ronald McDonald Figure: needs a studio restyle (2 Higgsfield credits); balance is 0, so nothing was posted
+
 ## Posts (cycle 1, 22/45 posted)
 
 | Date | Item | AED | Post ID |
