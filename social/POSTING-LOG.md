@@ -4,7 +4,7 @@ Written by `social/rotate.py`; do not edit by hand.
 
 ## Last failure
 
-2026-10-17 — Ronald McDonald Figure: needs a studio restyle (2 Higgsfield credits); balance is 0, so nothing was posted
+2026-10-18 — Ronald McDonald Figure: still no Higgsfield credits for the restyle (balance 0); nothing posted
 
 ## Posts (cycle 1, 22/45 posted)
 
