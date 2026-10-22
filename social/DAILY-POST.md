@@ -109,6 +109,10 @@ what failed and what's needed. Never post a substitute.
 Routine `trig_01Bwh7ZRgWuTNMgns6x6ciTW`, 09:05 Asia/Dubai daily, fires into Claude Code session
 `session_01Vz2Udhh1btnkRbdce35ZJS` (where the daily reports appear).
 
+**Stopped 2026-10-22 at the owner's request** (disabled, not deleted). It had skipped every day
+since 2026-10-17 for want of Higgsfield credits. Re-enable it to resume; the rotation picks up at
+i011 Ronald McDonald Figure.
+
 ## Open items for Ahmed
 
 - **Turn off the PC tasks** `myth-studios-daily-post` and `myth-studios-reels` in the Claude
