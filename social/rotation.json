@@ -212,7 +212,8 @@
     "2026-10-18": "i011",
     "2026-10-19": "i011",
     "2026-10-20": "i011",
-    "2026-10-21": "i011"
+    "2026-10-21": "i011",
+    "2026-10-22": "i011"
   },
   "failures": [
     {
@@ -237,6 +238,11 @@
     },
     {
       "date": "2026-10-21",
+      "id": "i011",
+      "reason": "still no Higgsfield credits for the restyle (balance 0); nothing posted"
+    },
+    {
+      "date": "2026-10-22",
       "id": "i011",
       "reason": "still no Higgsfield credits for the restyle (balance 0); nothing posted"
     }
